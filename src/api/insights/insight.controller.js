@@ -2,10 +2,10 @@ const insightService = require('./insight.service');
 
 async function getOverlappingEvents(req, res) {
   try {
-    const params = {
-      startDate: req.query.start_date,
-      endDate: req.query.end_date
-    };
+    const { startDate, endDate } = req.query;
+    if (!startDate || !endDate) {
+      return res.status(400).json({ message: 'Both startDate and endDate query parameters are required.' });
+    }
 
     const result = await insightService.findOverlappingEvents(params.startDate, params.endDate);
 
