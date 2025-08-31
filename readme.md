@@ -1,13 +1,5 @@
 # Chronologicon Engine - ArchaeoData Inc.
 
-## Project Overview
-
-The Chronologicon Engine is a robust Node.js backend service designed for ArchaeoData Inc. to ingest, manage, query, and analyze fragmented historical event data. The primary goal is to reconstruct coherent historical timelines from large, disparate text files. The service provides a RESTful API to handle asynchronous data ingestion, retrieve hierarchical timelines, perform complex searches, and gain analytical insights into the event data.
-
-This project is built with a focus on scalability, data integrity, and performance, using a PostgreSQL database for persistent storage and efficient querying.
-
----
-
 ## Key Features
 
 * **Asynchronous File Ingestion:** Efficiently processes large text files by streaming data, with robust error handling and persistent job status tracking.
@@ -32,8 +24,8 @@ Follow these instructions to get the Chronologicon Engine running on your local 
 ### 1. Clone the Repository
 
 ```bash
-git clone <your-repository-url>
-cd <repository-folder>
+git clone https://github.com/jsq1234/kelp-project.git
+cd kelp-project
 ```
 
 ### 2. Install Dependencies
@@ -56,8 +48,8 @@ Now, open the `.env` file and add the following configuration. These values **mu
 
 ```ini
 # .env file
-PGUSER=oreshnik
-PGPASSWORD=mysecretpassword
+PGUSER=user
+PGPASSWORD=password
 PGDATABASE=historical_events
 PGHOST=localhost
 PGPORT=5432
@@ -107,8 +99,8 @@ Initiates the asynchronous ingestion of historical event data from a server-acce
     ```json
     {
       "status": "Ingestion initiated",
-      "jobId": "ingest-job-...",
-      "message": "Check /api/events/ingestion-status/ingest-job-... for updates."
+      "jobId": "9b8a7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d",
+      "message": "Check /api/events/ingestion-status/9b8a7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d for updates."
     }
     ```
 * **Example `curl`:**
@@ -127,7 +119,7 @@ Retrieves the current status and progress of an ingestion job.
 * **Success Response (200 OK - COMPLETED):**
     ```json
     {
-        "jobId": "ingest-job-...",
+        "jobId": "9b8a7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d",
         "status": "COMPLETED",
         "processedLines": 13,
         "errorLines": 2,
@@ -142,7 +134,7 @@ Retrieves the current status and progress of an ingestion job.
     ```
 * **Example `curl`:**
     ```bash
-    curl http://localhost:3000/api/events/ingestion-status/ingest-job-12345-abcde
+    curl http://localhost:3000/api/events/ingestion-status/9b8a7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d
     ```
 
 #### 3. Get Event Timeline
