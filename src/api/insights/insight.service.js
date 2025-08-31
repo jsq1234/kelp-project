@@ -1,24 +1,18 @@
-const db = require('../../configs/db');
+const databaseService = require('../../database/database.service');
 
+/**
+ * Finds all pairs of events that have overlapping timeframes within a given date range.
+ * Uses an efficient O(n log n) sweep-line algorithm.
+ * @param {string} startDate The start of the date range (ISO 8601).
+ * @param {string} endDate The end of the date range (ISO 8601).
+ * @returns {Promise<Array<object>>} An array of objects, each representing an overlapping pair and their overlap duration.
+ */
 async function findOverlappingEvents(startDate, endDate) {
-  const queryText = `
-    SELECT
-      event_id,
-      event_name,
-      start_date,
-      end_date
-    FROM
-      historical_events
-    WHERE
-      start_date >= $1 AND end_date <= $2;
-  `;
-
-  const { rows: events } = await db.query(queryText, [startDate, endDate]);
+  const events = await databaseService.getEventsInRange(startDate, endDate);
 
   if (events.length < 2) {
-    return []; 
+    return [];
   }
-
 
   const points = [];
   for (const event of events) {
@@ -73,15 +67,14 @@ async function findOverlappingEvents(startDate, endDate) {
   return overlappingPairs;
 }
 
+/**
+ * Finds the largest continuous time gap between events within a specified date range.
+ * @param {string} startDate The start of the date range (ISO 8601).
+ * @param {string} endDate The end of the date range (ISO 8601).
+ * @returns {Promise<object>} An object containing details of the largest gap, or a message if no gap is found.
+ */
 async function findTemporalGaps(startDate, endDate) {
-  const queryText = `
-    SELECT event_id, event_name, start_date, end_date
-    FROM historical_events
-    WHERE start_date >= $1 AND end_date <= $2
-    ORDER BY start_date;
-  `;
-
-  const { rows: events } = await db.query(queryText, [startDate, endDate]);
+  const events = await databaseService.getSortedEventsInRange(startDate, endDate);
 
   if (events.length < 2) {
     return {
@@ -140,37 +133,19 @@ async function findTemporalGaps(startDate, endDate) {
     };
   }
 }
-
+/**
+ * Finds the shortest path (by cumulative duration) between a source and target event using Dijkstra's algorithm.
+ * @param {string} sourceEventId The UUID of the starting event.
+ * @param {string} targetEventId The UUID of the destination event.
+ * @returns {Promise<object>} An object containing the shortest path and total duration.
+ */
 async function findEventInfluencePath(sourceEventId, targetEventId) {
-  // Step 1: Fetch all events in the hierarchy starting from the source event.
-  // This defines the graph we need to search.
-  const queryText = `
-    WITH RECURSIVE event_hierarchy AS (
-      SELECT
-        event_id, event_name, duration_minutes, parent_event_id
-      FROM
-        historical_events
-      WHERE
-        event_id = $1
-
-      UNION ALL
-
-      SELECT
-        e.event_id, e.event_name, e.duration_minutes, e.parent_event_id
-      FROM
-        historical_events e
-      INNER JOIN
-        event_hierarchy eh ON e.parent_event_id = eh.event_id
-    )
-    SELECT * FROM event_hierarchy;
-  `;
-  const { rows: events } = await db.query(queryText, [sourceEventId]);
+  const events = await databaseService.getEventDescendants(sourceEventId);
 
   if (events.length === 0) {
     return { message: "Source event not found." };
   }
 
-  // Step 2: Build an in-memory representation of the graph (adjacency list and node data map).
   const eventMap = new Map();
   const childrenMap = new Map();
   for (const event of events) {
@@ -197,10 +172,10 @@ async function findEventInfluencePath(sourceEventId, targetEventId) {
     };
   }
 
-  // Step 3: Use Dijkstra's algorithm to find the shortest path.
+  // Use Dijkstra's algorithm to find the shortest path.
   const distances = new Map();
   const previousNodes = new Map();
-  const pq = new Set([sourceEventId]); // Using a Set as a simple priority queue
+  const pq = new Set([sourceEventId]); 
 
   for (const eventId of eventMap.keys()) {
     distances.set(eventId, Infinity);
@@ -209,7 +184,6 @@ async function findEventInfluencePath(sourceEventId, targetEventId) {
 
   while (pq.size > 0) {
     let u = null;
-    // Get the node in pq with the smallest distance
     for (const eventId of pq) {
       if (u === null || distances.get(eventId) < distances.get(u)) {
         u = eventId;
@@ -217,8 +191,7 @@ async function findEventInfluencePath(sourceEventId, targetEventId) {
     }
     pq.delete(u);
 
-    if (u === targetEventId) break; // We found the target
-
+    if (u === targetEventId) break; 
     const children = childrenMap.get(u) || [];
     for (const v of children) {
       const alt = distances.get(u) + eventMap.get(v).duration_minutes;
@@ -230,7 +203,6 @@ async function findEventInfluencePath(sourceEventId, targetEventId) {
     }
   }
 
-  // Step 4: Reconstruct the path and format the response.
   const path = [];
   let currentId = targetEventId;
   if (previousNodes.has(currentId) || currentId === sourceEventId) {

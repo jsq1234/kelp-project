@@ -1,33 +1,37 @@
 const { v4: uuidv4 } = require('uuid');
 const { processFile } = require('../../jobs/ingestionProcessor');
-const db = require('../../configs/db');
+const databaseService = require('../../database/database.service');
 
-// The in-memory jobStatuses object has been removed.
-
+/**
+ * Initiates an ingestion job.
+ * It creates a job record in the database and then starts the file processing in the background.
+ * @param {string} filePath The path to the file to be ingested.
+ * @returns {Promise<string>} The ID of the initiated job.
+ */
 async function startIngestionJob(filePath) {
-  const queryText = `
-    INSERT INTO ingestion_jobs (status, file_path)
-    VALUES ('PENDING', $1) RETURNING job_id;
-  `;
+  // Use the database service to create the job record
+  const jobId = await databaseService.createIngestionJob(filePath);
 
-  const result = await db.query(queryText, [filePath]);
-  const jobId = result.rows[0].job_id;
-
+  // Start the background processing job
   processFile(jobId, filePath);
 
   return jobId;
 }
 
+/**
+ * Retrieves the status of a specific ingestion job.
+ * @param {string} jobId The ID of the job to check.
+ * @returns {Promise<object|null>} The formatted job status object, or null if not found.
+ */
 async function getJobStatus(jobId) {
-  const queryText = `SELECT * FROM ingestion_jobs WHERE job_id = $1`;
-  const { rows } = await db.query(queryText, [jobId]);
+  // Use the database service to get the raw job data
+  const job = await databaseService.getIngestionJob(jobId);
 
-  if (rows.length === 0) {
-    return null; 
+  if (!job) {
+    return null;
   }
 
-  const job = rows[0];
-
+  // Map the database record to the required API response format
   const response = {
     jobId: job.job_id,
     status: job.status,
@@ -45,47 +49,14 @@ async function getJobStatus(jobId) {
   return response;
 }
 
+/**
+ * Constructs a full hierarchical timeline, including all ancestors and descendants, for a given event.
+ * @param {string} rootEventId The UUID of the event to start the timeline from.
+ * @returns {Promise<object|null>} A nested object representing the full timeline, or null if the event is not found.
+ */
 async function getTimelineByRootEventId(rootEventId) {
-  const queryText = `
-    WITH RECURSIVE EventAncestors AS (
-        SELECT
-            event_id, event_name, description, start_date, end_date, duration_minutes, parent_event_id, metadata
-        FROM
-            historical_events
-        WHERE
-            event_id = $1
-        UNION ALL
-
-        SELECT
-            e.event_id, e.event_name, e.description, e.start_date, e.end_date, e.duration_minutes, e.parent_event_id, e.metadata
-        FROM
-            historical_events e
-        INNER JOIN
-            EventAncestors ea ON e.event_id = ea.parent_event_id
-    ),
-    EventDescendants AS (
-        SELECT
-            event_id, event_name, description, start_date, end_date, duration_minutes, parent_event_id, metadata
-        FROM
-            historical_events
-        WHERE
-            event_id = $1
-
-        UNION ALL
-
-        SELECT
-            e.event_id, e.event_name, e.description, e.start_date, e.end_date, e.duration_minutes, e.parent_event_id, e.metadata
-        FROM
-            historical_events e
-        INNER JOIN
-            EventDescendants ed ON e.parent_event_id = ed.event_id
-    )
-    SELECT * FROM EventAncestors
-    UNION
-    SELECT * FROM EventDescendants;
-  `;
-
-  const { rows : flatList } = await db.query(queryText, [rootEventId]);
+  // Fetch the entire family (ancestors and descendants) in a flat list
+  const flatList = await databaseService.getEventFamily(rootEventId);
 
   if (flatList.length === 0) {
     return null; 
@@ -132,58 +103,15 @@ async function getTimelineByRootEventId(rootEventId) {
   return resultNode;
 }
 
+/**
+ * Searches for events based on a set of filter, sort, and pagination parameters.
+ * @param {object} params The search parameters.
+ * @returns {Promise<object>} The paginated search results.
+ */
 async function searchEvents(params) {
-  const { name, startDateAfter, endDateBefore, sortBy, sortOrder, page, limit } = params;
-
-  const allowedSortBy = ['event_name', 'start_date', 'end_date'];
-  const sortColumn = allowedSortBy.includes(sortBy) ? `"${sortBy}"` : 'start_date';
-
-  const order = sortOrder.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
-
-  const offset = (page - 1) * limit;
-
-  let whereClauses = [];
-  let queryValues = [];
-  let paramIndex = 1;
-
-  if (name) {
-    whereClauses.push(`event_name ILIKE $${paramIndex++}`);
-    queryValues.push(`%${name}%`);
-  }
-  if (startDateAfter) {
-    whereClauses.push(`start_date >= $${paramIndex++}`);
-    queryValues.push(startDateAfter);
-  }
-  if (endDateBefore) {
-    whereClauses.push(`end_date <= $${paramIndex++}`);
-    queryValues.push(endDateBefore);
-  }
-
-  const whereString = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
-
-  const countQuery = `SELECT COUNT(*) FROM historical_events ${whereString}`;
-  const countResult = await db.query(countQuery, queryValues);
-  const totalEvents = parseInt(countResult.rows[0].count, 10);
-
-  // Then, fetch the actual data with sorting and pagination
-  const dataQuery = `
-    SELECT event_id, event_name, description, start_date, end_date, duration_minutes, parent_event_id
-    FROM historical_events
-    ${whereString}
-    ORDER BY ${sortColumn} ${order}
-    LIMIT $${paramIndex++}
-    OFFSET $${paramIndex++}
-  `;
-  
-  const finalQueryValues = [...queryValues, limit, offset];
-  const { rows: events } = await db.query(dataQuery, finalQueryValues);
-
-  return {
-    totalEvents,
-    page,
-    limit,
-    events,
-  };
+  // This function now acts as a pass-through to the database service,
+  // which handles all the query building and execution logic.
+  return databaseService.searchEvents(params);
 }
 
 module.exports = {

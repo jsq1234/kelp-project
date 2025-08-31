@@ -17,8 +17,9 @@ CREATE TABLE historical_events (
 );
 
 -- Create indexes for better query performance on date fields
-CREATE INDEX idx_start_date ON historical_events(start_date);
-CREATE INDEX idx_end_date ON historical_events(end_date);
+CREATE INDEX idx_start_date_historical ON historical_events(start_date);
+CREATE INDEX idx_end_date_historical ON historical_events(end_date);
+CREATE INDEX idx_parent_event_id_historical ON historical_events(parent_event_id);
 
 -- NEW: Create the ingestion_jobs table to store job status
 CREATE TABLE ingestion_jobs (
@@ -43,3 +44,5 @@ CREATE TABLE staging_events (
     parent_event_id UUID,
     metadata JSONB
 );
+
+CREATE INDEX idx_parent_event_id_staging ON staging_events(parent_event_id);

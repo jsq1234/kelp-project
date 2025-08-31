@@ -7,7 +7,7 @@ async function getOverlappingEvents(req, res) {
       return res.status(400).json({ message: 'Both startDate and endDate query parameters are required.' });
     }
 
-    const result = await insightService.findOverlappingEvents(params.startDate, params.endDate);
+    const result = await insightService.findOverlappingEvents(startDate, endDate);
 
     res.status(200).json(result);
   } catch (error) {
